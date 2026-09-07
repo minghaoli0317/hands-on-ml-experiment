@@ -4,16 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "market-volatility"
-version = "0.1.0"
+version = "0.2.0"
 description = "An educational machine-learning project for forecasting market volatility."
 requires-python = ">=3.11"
 readme = "README.md"
+dependencies = [
+    "joblib>=1.3",
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "scikit-learn>=1.4",
+    "seaborn>=0.13",
+    "yfinance>=0.2.40",
+]
+
+[project.optional-dependencies]
+notebook = ["ipykernel>=6", "jupyterlab>=4"]
+dev = ["pytest>=8", "ruff>=0.6"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.ruff]
 target-version = "py311"

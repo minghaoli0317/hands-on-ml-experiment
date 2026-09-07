@@ -34,7 +34,6 @@ FEATURE_COLUMNS = [
 ]
 
 
-# Calculate 20-day forward volatility measure for each trading day. 
 def forward_realized_volatility(
     log_returns: pd.Series,
     horizon: int = FORWARD_HORIZON,
@@ -52,22 +51,15 @@ def forward_realized_volatility(
 
     if horizon < 1:
         raise ValueError("horizon must be at least 1.")
-    
     future_mean_squared_return = (
         log_returns.pow(2)
-        .rolling(window = horizon, min_periods = horizon)
+        .rolling(window=horizon, min_periods=horizon)
         .mean()
         .shift(-horizon)
     )
-
-    annualized_variance = (
-        annualization * future_mean_squared_return
-    )
-
-    return annualized_variance.pow(0.5).rename(TARGET_COLUMN)
+    return np.sqrt(annualization * future_mean_squared_return).rename(TARGET_COLUMN)
 
 
-# Construct various volatility features on raw price dataset. 
 def make_modeling_dataset(prices: pd.DataFrame) -> pd.DataFrame:
     """Create stationary, financially interpretable predictors and the target.
 
@@ -83,7 +75,7 @@ def make_modeling_dataset(prices: pd.DataFrame) -> pd.DataFrame:
     log_returns = np.log(adjusted_close / adjusted_close.shift(1))
     squared_returns = log_returns.pow(2)
 
-    features = pd.DataFrame(index = prices.index)
+    features = pd.DataFrame(index=prices.index)
     features["log_return_1d"] = log_returns
     features["return_5d"] = log_returns.rolling(5).sum()
     features["return_20d"] = log_returns.rolling(20).sum()
@@ -125,5 +117,4 @@ def make_modeling_dataset(prices: pd.DataFrame) -> pd.DataFrame:
     dataset = features.join(target)
     dataset = dataset.replace([np.inf, -np.inf], np.nan).dropna()
     dataset.index.name = "Date"
-
     return dataset

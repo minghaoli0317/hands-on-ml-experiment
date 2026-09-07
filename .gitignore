@@ -20,10 +20,11 @@ __pycache__/
 # Downloaded and generated data
 data/raw/*
 !data/raw/.gitkeep
-
 data/processed/*
 !data/processed/.gitkeep
 
 # Serialized models
+models/*
+!models/.gitkeep
 *.joblib
 *.pkl

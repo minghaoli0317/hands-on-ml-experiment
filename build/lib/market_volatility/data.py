@@ -10,7 +10,6 @@ import pandas as pd
 import yfinance as yf
 
 
-# Define project folder root and output folder paths. 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
@@ -18,8 +17,6 @@ REPORTS_DIR = PROJECT_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 MODELS_DIR = PROJECT_ROOT / "models"
 
-
-# Columns in Yahoo Finance raw data. 
 REQUIRED_PRICE_COLUMNS = {
     "Adj Close",
     "Close",
@@ -33,46 +30,36 @@ REQUIRED_PRICE_COLUMNS = {
 @dataclass(frozen=True)
 class DatasetSplits:
     """Container for purged chronological train, validation, and test sets."""
+
     train: pd.DataFrame
     validation: pd.DataFrame
     test: pd.DataFrame
 
 
-# Define function to sanity check downloaded raw Yahoo Finance data. 
 def validate_price_data(prices: pd.DataFrame) -> None:
     """Raise a clear exception when raw daily price data are unsuitable."""
 
     missing_columns = REQUIRED_PRICE_COLUMNS.difference(prices.columns)
-
     if missing_columns:
         raise ValueError(f"Missing required columns: {sorted(missing_columns)}")
-    
     if prices.empty:
         raise ValueError("The price data are empty.")
-    
     if not isinstance(prices.index, pd.DatetimeIndex):
         raise TypeError("The price data index must be a pandas DatetimeIndex.")
-    
     if prices.index.has_duplicates:
         raise ValueError("The price data contain duplicate dates.")
-    
     if not prices.index.is_monotonic_increasing:
         raise ValueError("The price data must be sorted from oldest to newest.")
-    
     if prices[list(REQUIRED_PRICE_COLUMNS)].isna().any().any():
         raise ValueError("Required price columns contain missing values.")
-    
     if (prices[["Adj Close", "Close", "High", "Low", "Open", "Volume"]] <= 0).any().any():
         raise ValueError("Prices and volume must be strictly positive.")
-    
     if (prices["High"] < prices[["Open", "Close", "Low"]].max(axis=1)).any():
         raise ValueError("At least one daily High is below another OHLC value.")
-    
     if (prices["Low"] > prices[["Open", "Close", "High"]].min(axis=1)).any():
         raise ValueError("At least one daily Low is above another OHLC value.")
 
 
-# Download and save raw Yahoo Finance data. 
 def fetch_yahoo_data(
     symbol: str,
     raw_dir: Path = RAW_DIR,
@@ -83,18 +70,17 @@ def fetch_yahoo_data(
 
     symbol = symbol.upper()
     filename_symbol = symbol.lower()
-    raw_dir.mkdir(parents = True, exist_ok = True)
+    raw_dir.mkdir(parents=True, exist_ok=True)
 
     prices = yf.download(
-        tickers = symbol,
-        period = period,
-        interval = interval,
-        auto_adjust = False,
-        actions = True,
-        progress = False,
-        multi_level_index = False,
+        tickers=symbol,
+        period=period,
+        interval=interval,
+        auto_adjust=False,
+        actions=True,
+        progress=False,
+        multi_level_index=False,
     )
-
     if prices is None or prices.empty:
         raise RuntimeError(f"No price data were returned for {symbol}.")
 
@@ -107,7 +93,7 @@ def fetch_yahoo_data(
     temporary_path = raw_path.with_suffix(".csv.tmp")
 
     try:
-        prices.to_csv(temporary_path, index_label = "Date")
+        prices.to_csv(temporary_path, index_label="Date")
         temporary_path.replace(raw_path)
     finally:
         temporary_path.unlink(missing_ok=True)
@@ -123,7 +109,6 @@ def fetch_yahoo_data(
     return prices, raw_path
 
 
-# Read in downloaded Yahoo Finance raw data for a ticker. 
 def load_yahoo_data(symbol: str, raw_dir: Path = RAW_DIR) -> pd.DataFrame:
     """Load the single locally saved raw Yahoo Finance CSV for a ticker."""
 
@@ -142,12 +127,10 @@ def load_yahoo_data(symbol: str, raw_dir: Path = RAW_DIR) -> pd.DataFrame:
     prices = pd.read_csv(saved_paths[0], index_col=0, parse_dates=[0])
     prices.index.name = "Date"
     prices = prices.sort_index()
-
     validate_price_data(prices)
     return prices
 
 
-# Create chronological data split into training, test, and validation sets. 
 def chronological_split(
     dataset: pd.DataFrame,
     validation_start: str = "2016-01-01",
@@ -165,7 +148,6 @@ def chronological_split(
         raise ValueError("purge_horizon must be at least 1.")
 
     ordered = dataset.sort_index().copy()
-
     if not isinstance(ordered.index, pd.DatetimeIndex):
         raise TypeError("The modeling dataset index must be a DatetimeIndex.")
     if ordered.index.has_duplicates:
@@ -173,16 +155,13 @@ def chronological_split(
 
     validation_date = pd.Timestamp(validation_start)
     test_date = pd.Timestamp(test_start)
-
     if validation_date >= test_date:
         raise ValueError("validation_start must be earlier than test_start.")
 
     train_candidates = ordered.loc[ordered.index < validation_date]
-
     validation_candidates = ordered.loc[
         (ordered.index >= validation_date) & (ordered.index < test_date)
     ]
-
     test = ordered.loc[ordered.index >= test_date].copy()
 
     if len(train_candidates) <= purge_horizon:
@@ -194,11 +173,9 @@ def chronological_split(
 
     train = train_candidates.iloc[:-purge_horizon].copy()
     validation = validation_candidates.iloc[:-purge_horizon].copy()
+    return DatasetSplits(train=train, validation=validation, test=test)
 
-    return DatasetSplits(train = train, validation = validation, test = test)
 
-
-# Create training set for finalized model choice by combining training and validation sets.
 def final_training_set(
     dataset: pd.DataFrame,
     test_start: str = "2021-01-01",
@@ -211,11 +188,9 @@ def final_training_set(
     ]
     if len(candidates) <= purge_horizon:
         raise ValueError("Not enough pre-test rows to apply the purge.")
-    
     return candidates.iloc[:-purge_horizon].copy()
 
 
-# Save out modeling data, training set, validation set, and test set. 
 def save_modeling_data(
     dataset: pd.DataFrame,
     splits: DatasetSplits,
@@ -223,26 +198,21 @@ def save_modeling_data(
 ) -> dict[str, Path]:
     """Save the complete modeling table and each chronological partition."""
 
-    processed_dir.mkdir(parents = True, exist_ok = True)
-
+    processed_dir.mkdir(parents=True, exist_ok=True)
     frames = {
         "modeling_dataset": dataset,
         "train": splits.train,
         "validation": splits.validation,
         "test": splits.test,
     }
-
     paths: dict[str, Path] = {}
-
     for name, frame in frames.items():
         path = processed_dir / f"{name}.csv"
         frame.to_csv(path, index_label="Date")
         paths[name] = path
-
     return paths
 
 
-# Read in complete modelling dataset. 
 def load_modeling_dataset(
     path: Path = PROCESSED_DIR / "modeling_dataset.csv",
 ) -> pd.DataFrame:
@@ -250,5 +220,4 @@ def load_modeling_dataset(
 
     if not path.exists():
         raise FileNotFoundError(f"Prepared dataset not found: {path}")
-    
     return pd.read_csv(path, index_col="Date", parse_dates=["Date"])
